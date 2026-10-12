@@ -81,6 +81,7 @@ The panel saves to `ultimate-status.json` in your Claude config folder (`~/.clau
 - `hover`: `complement` (the default, the opposite color) or `brighter`.
 - `fiveShow`, `weekShow`: `both` (the default), `time` or `percent`.
 - `usageCompact`: `true` drops the spaces: `5h3m 95%`.
+- `shareUsage`: `false` stops writing `~/.claude/ultimate-status/usage.json` (on by default; 5h, 7d, context %, model, cwd and session id, at most every 5 seconds when they change; no secrets). Toggle: Display tab, "Share usage with Weft".
 - `usageLabels`: `false` hides the `5h` and `7d` labels: `22h 37m 69%`.
 - `ctxBar`: `progress`, `line` or `shade`.
 - `icons`: `true` or `false`.

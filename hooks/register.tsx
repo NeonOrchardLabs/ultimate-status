@@ -5,6 +5,7 @@ import type { Usage } from '../types'
 import { DEFAULT_BAR, blockPieces, fromLayout, move, piecesWidth, renderBar, resize } from './bar'
 import type { BarConfig, Geom, ItemId, Piece } from './bar'
 import { panel } from './panel'
+import { claim, release, usageKey, usagePayload } from './share'
 import { CTX_BARS, DEFAULTS, DEFAULT_COLORS, cleanSettings, hoverColor, inkColor, tmuxColor } from './settings'
 import type { Colors, Settings } from './settings'
 
@@ -31,6 +32,7 @@ let fiveShow = DEFAULTS.fiveShow
 let weekShow = DEFAULTS.weekShow
 let usageCompact = DEFAULTS.usageCompact
 let usageLabels = DEFAULTS.usageLabels
+let shareOn = DEFAULTS.shareUsage
 let hover = DEFAULTS.hover
 
 export function prettyModel(id: string): string {
@@ -204,6 +206,34 @@ async function speedOf($: EngineInterface): Promise<string> {
     if (row && typeof row.value === 'boolean') return row.value ? 'Fast' : 'Normal'
   } catch {}
   return 'Normal'
+}
+
+// Writes usage.json atomically (temp file, then rename). Never throws; a failed
+// write is retried on the next refresh. The engine has no debug channel for a
+// mod, so failures stay silent.
+async function shareUsage($: EngineInterface, ctx: { percent?: number }, limits: readonly { kind: string; percentUsed: number; resetsAt?: string }[]) {
+  const now = Date.now()
+  const payload = usagePayload(now, null, null, null, ctx, limits)
+  const prev = claim(now, usageKey(payload))
+  if (!prev) return
+  try {
+    const [sessionId, cwd, model] = await Promise.all([
+      $.session.id().catch(() => null),
+      $.session.cwd().catch(() => null),
+      $.session.model().catch(() => null),
+    ])
+    const body = JSON.stringify({ ...payload, session_id: sessionId || null, cwd: cwd || null, model: model || null })
+    const home = await $.env.get('HOME')
+    if (!home) throw new Error('no HOME')
+    const dir = `${home}/.claude/ultimate-status`
+    const tmp = `${dir}/usage.json.tmp-${now}`
+    await $.process.run(['mkdir', '-p', dir], { timeoutMs: 5000 })
+    await $.fs.write(tmp, body + '\n')
+    const r = await $.process.run(['mv', '-f', tmp, `${dir}/usage.json`], { timeoutMs: 5000 })
+    if (r.exitCode !== 0) throw new Error(r.stderr)
+  } catch {
+    release(prev)
+  }
 }
 
 function toUsage(ctx: { percent?: number }, limits: readonly { kind: string; percentUsed: number; resetsAt?: string }[]): Usage {
@@ -407,6 +437,7 @@ async function useSettings($: EngineInterface) {
   weekShow = s.weekShow
   usageCompact = s.usageCompact
   usageLabels = s.usageLabels
+  shareOn = s.shareUsage
   hover = s.hover
   if (!unlocked && cached && cached.mtime !== applied) {
     applied = cached.mtime
@@ -416,7 +447,7 @@ async function useSettings($: EngineInterface) {
 
 // Writes the bar and colors into the file, keeping its other keys; a key set
 // to `undefined` is taken out. A file that isn't valid JSON is left alone.
-export async function saveSettings($: EngineInterface, next: { bar?: BarConfig; colors?: Colors; ctxBar?: string; icons?: boolean; fiveShow?: string; weekShow?: string; usageCompact?: boolean; usageLabels?: boolean; hover?: string }) {
+export async function saveSettings($: EngineInterface, next: { bar?: BarConfig; colors?: Colors; ctxBar?: string; icons?: boolean; fiveShow?: string; weekShow?: string; usageCompact?: boolean; usageLabels?: boolean; hover?: string; shareUsage?: boolean }) {
   if ('bar' in next) bar = next.bar ?? DEFAULT_BAR
   if ('colors' in next) C = next.colors ?? DEFAULT_COLORS
   if ('ctxBar' in next) ctxBar = next.ctxBar ?? DEFAULTS.ctxBar
@@ -426,6 +457,7 @@ export async function saveSettings($: EngineInterface, next: { bar?: BarConfig; 
   if ('usageCompact' in next) usageCompact = next.usageCompact ?? DEFAULTS.usageCompact
   if ('usageLabels' in next) usageLabels = next.usageLabels ?? DEFAULTS.usageLabels
   if ('hover' in next) hover = next.hover ?? DEFAULTS.hover
+  if ('shareUsage' in next) shareOn = next.shareUsage ?? DEFAULTS.shareUsage
   try {
     const path = await settingsPath($)
     const has = await $.fs.exists(path)
@@ -441,6 +473,7 @@ export async function saveSettings($: EngineInterface, next: { bar?: BarConfig; 
     if ('icons' in next) o.icons = next.icons ?? DEFAULTS.icons
     if ('usageCompact' in next) o.usageCompact = next.usageCompact ?? DEFAULTS.usageCompact
     if ('usageLabels' in next) o.usageLabels = next.usageLabels ?? DEFAULTS.usageLabels
+    if ('shareUsage' in next) o.shareUsage = next.shareUsage ?? DEFAULTS.shareUsage
     // Blocks replace the older layout key.
     if ('bar' in next) delete o.layout
     await $.fs.write(path, JSON.stringify(o, null, 2) + '\n')
@@ -737,6 +770,7 @@ export const register: Register = on => {
     weekShow = s.weekShow
     usageCompact = s.usageCompact
     usageLabels = s.usageLabels
+    shareOn = s.shareUsage
     hover = s.hover
     // Before the settings file, a dragged layout lived in the mod store.
     const stored = await $.store.get('layout')
@@ -747,6 +781,7 @@ export const register: Register = on => {
       try {
         const u = await $.session.usage()
         await update($, usage, prev => ({ ...toUsage(u.context, u.rateLimits), measuredAt: prev.measuredAt }))
+        if (shareOn) await shareUsage($, u.context, u.rateLimits)
       } catch {}
     }
     await refresh()
@@ -802,6 +837,7 @@ export const register: Register = on => {
       weekShow,
       usageCompact,
       usageLabels,
+      shareUsage: shareOn,
       hover,
       picking: await read($, pick),
       shownFlavor: await read($, flavor),
@@ -819,6 +855,7 @@ export const register: Register = on => {
 
   on('session.measure', async ($, e, next) => {
     await update($, usage, () => ({ ...toUsage(e.context, e.rateLimits), measuredAt: Date.now() }))
+    if (shareOn) await shareUsage($, e.context, e.rateLimits)
     return next(e)
   })
 

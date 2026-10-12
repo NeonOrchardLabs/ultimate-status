@@ -78,8 +78,9 @@ export type PanelContext = {
   weekShow: string
   usageCompact: boolean
   usageLabels: boolean
+  shareUsage: boolean
   hover: string
-  save: (next: { bar?: BarConfig; colors?: Colors; ctxBar?: string; icons?: boolean; fiveShow?: string; weekShow?: string; usageCompact?: boolean; usageLabels?: boolean; hover?: string }) => Promise<void>
+  save: (next: { bar?: BarConfig; colors?: Colors; ctxBar?: string; icons?: boolean; fiveShow?: string; weekShow?: string; usageCompact?: boolean; usageLabels?: boolean; hover?: string; shareUsage?: boolean }) => Promise<void>
 }
 
 type El = (props: Record<string, unknown>, ...children: unknown[]) => RenderElement
@@ -245,7 +246,7 @@ export function panel(ctx: PanelContext): RenderElement {
   )
 
   // --- Display tab: how items look.
-  const displayChanged = (['ctxBar', 'icons', 'fiveShow', 'weekShow', 'usageCompact', 'usageLabels', 'hover'] as const).filter(k => ctx[k] !== DEFAULTS[k]).length
+  const displayChanged = (['ctxBar', 'icons', 'fiveShow', 'weekShow', 'usageCompact', 'usageLabels', 'hover', 'shareUsage'] as const).filter(k => ctx[k] !== DEFAULTS[k]).length
   const usage = Object.entries(USAGE_SHOW).map(([value, label]) => ({ value, label }))
   const displayTab = (
     <Box key="page-display" flexDirection="column">
@@ -267,9 +268,12 @@ export function panel(ctx: PanelContext): RenderElement {
             v => ctx.save({ usageCompact: v === 'compact' })))}
         {row('hover-style', 'On hover',
           cycle('hoverstyle', ctx.hover, Object.entries(HOVER_STYLES).map(([value, label]) => ({ value, label })), v => ctx.save({ hover: v })))}
+        {row('share-usage', 'Share usage with Weft',
+          cycle('shareusage', ctx.shareUsage ? 'on' : 'off', [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+            v => ctx.save({ shareUsage: v === 'on' })))}
       </Box>
       {status('st-display', displayChanged, 'display settings', () =>
-        ctx.save({ ctxBar: DEFAULTS.ctxBar, icons: DEFAULTS.icons, fiveShow: DEFAULTS.fiveShow, weekShow: DEFAULTS.weekShow, usageCompact: DEFAULTS.usageCompact, usageLabels: DEFAULTS.usageLabels, hover: DEFAULTS.hover }))}
+        ctx.save({ ctxBar: DEFAULTS.ctxBar, icons: DEFAULTS.icons, fiveShow: DEFAULTS.fiveShow, weekShow: DEFAULTS.weekShow, usageCompact: DEFAULTS.usageCompact, usageLabels: DEFAULTS.usageLabels, hover: DEFAULTS.hover, shareUsage: DEFAULTS.shareUsage }))}
     </Box>
   )
 
