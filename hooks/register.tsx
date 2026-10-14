@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Usage } from '../types'
 import { DEFAULT_BAR, blockPieces, fromLayout, move, piecesWidth, renderBar, resize } from './bar'
 import type { BarConfig, Geom, ItemId, Piece } from './bar'
+import { HOST_CHECK_MS, weftAdopted } from './host'
 import { panel } from './panel'
 import { claim, release, usageKey, usagePayload } from './share'
 import { CTX_BARS, DEFAULTS, DEFAULT_COLORS, cleanSettings, hoverColor, inkColor, tmuxColor } from './settings'
@@ -408,6 +409,31 @@ async function settingsPath($: EngineInterface): Promise<string> {
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
   const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
   return `${dir}/ultimate-status.json`
+}
+
+// Whether Weft draws the bar itself; checked at most every few seconds.
+let hostCache: { at: number; value: boolean } | undefined
+async function hostAdopted($: EngineInterface): Promise<boolean> {
+  const now = Date.now()
+  if (hostCache && now - hostCache.at < HOST_CHECK_MS) return hostCache.value
+  let value = false
+  try {
+    const termProgram = await $.env.get('TERM_PROGRAM')
+    if (termProgram === 'WeftTerminal') {
+      const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+      const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+      const path = `${dir}/ultimate-status/host-adopted.json`
+      const stat = await $.fs.stat(path).catch(() => undefined)
+      value = await weftAdopted({
+        termProgram,
+        flag: await $.env.get('WEFT_ADOPTS_ULTIMATE_STATUS'),
+        fileText: stat?.kind === 'file' ? ((await $.fs.read(path).catch(() => undefined)) as string | undefined) : undefined,
+        pidAlive: async pid => (await $.process.run(['kill', '-0', String(pid)], { timeoutMs: 2000 }).catch(() => undefined))?.exitCode === 0,
+      })
+    }
+  } catch {}
+  hostCache = { at: now, value }
+  return value
 }
 
 async function loadSettings($: EngineInterface): Promise<Settings> {
@@ -875,6 +901,7 @@ export const register: Register = on => {
     // The row under the chat box isn't told the terminal's width; this band is.
     if (e.viewport?.columns) knownColumns = e.viewport.columns
     if (e.props.hasSurvey) return next(e)
+    if (await hostAdopted($)) return next(e)
     await useSettings($)
     const pane = await paneOf($)
     if (pane) {
@@ -910,6 +937,7 @@ export const register: Register = on => {
   // The bar itself, outside tmux: one row right under the chat box, above Claude's
   // own hint and mode line.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if (await hostAdopted($)) return next(e)
     await useSettings($)
     if (await paneOf($)) return next(e)
     const { Box } = $.ui.resolve(e)

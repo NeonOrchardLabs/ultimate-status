@@ -92,6 +92,7 @@ The panel saves to `ultimate-status.json` in your Claude config folder (`~/.clau
 
 ## Heads-up
 
+- **Adopted by Weft.** In the Weft terminal, once "Adopt Ultimate-Status" is on (`WEFT_ADOPTS_ULTIMATE_STATUS=1`, or a live `~/.claude/ultimate-status/host-adopted.json` with `{"host":"weft","adopted":true,"pid":N}`), the bar is hidden in Claude Code so it isn't drawn twice. Weft draws it in its footer; the shared files are still written. Checked every 3 seconds, no restart needed.
 - **Mouse clicks need the fullscreen layout.** It's on by default in Claude Code. Inside tmux, clicks work too if `mouse` is on in tmux and your terminal reports the mouse (in iTerm2: Profiles > Terminal > "Enable mouse reporting").
 - **Mouse in Warp:** turn on Settings > Features > Terminal > Enable Mouse Reporting.
 - **Folder tabs** need tmux, Warp, or iTerm2 on macOS. In Warp, **Tab + Claude** writes a Tab Config named `ultimate_status_claude` to run `claude`.
