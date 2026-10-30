@@ -44,7 +44,9 @@ export const DEFAULT_BAR: BarConfig = {
     block('b1', 'left', ['model', 'speed']),
     block('b2', 'left', ['path']),
     block('b3', 'right', ['branch', 'ctx'], ' · '),
-    block('b4', 'right', ['five', 'week'], ' · '),
+    // Claude is dropping its 5-hour window, so the bar starts with just the
+    // 7-day one. The 5h item stays in the Items tab for services that have it.
+    block('b4', 'right', ['week'], ' · '),
   ],
 }
 

@@ -332,6 +332,8 @@ function itemContent(d: Bar, id: ItemId, max?: number): Piece[] {
       ].filter(p => p.text)
     }
     case 'five':
+      // Usage reported with no 5-hour window (Claude is dropping it): show nothing.
+      if (d.u.five === undefined && !d.u.fiveResets && d.u.week !== undefined) return []
       return usageItem('5h', C.fiveLabel, C.fiveValue, d.u.five, d.u.fiveResets, fiveShow, d.u.measuredAt)
     case 'week':
       return usageItem('7d', C.weekLabel, C.weekValue, d.u.week, d.u.weekResets, weekShow, d.u.measuredAt)
